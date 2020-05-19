@@ -714,11 +714,11 @@ class SiteTree(object):
         else:
             resolved_url = url_pattern
 
-        self._items_urls[sitetree_item] = resolved_url
-
         # Append optional url_params
         if sitetree_item.url_params:
             resolved_url = u'%s?%s' % (resolved_url, sitetree_item.url_params)
+
+        self._items_urls[sitetree_item] = resolved_url
 
         return resolved_url
 

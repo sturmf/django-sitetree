@@ -2,20 +2,25 @@ django-sitetree
 ===============
 http://github.com/idlesign/django-sitetree
 
-.. image:: https://badge.fury.io/py/django-sitetree.png
-    :target: http://badge.fury.io/py/django-sitetree
+.. image:: https://idlesign.github.io/lbc/py2-lbc.svg
+   :target: https://idlesign.github.io/lbc/
+   :alt: LBC Python 2
 
-.. image:: https://pypip.in/d/django-sitetree/badge.png
-    :target: https://crate.io/packages/django-sitetree
-        
-.. image:: https://coveralls.io/repos/idlesign/django-sitetree/badge.png 
-    :target: https://coveralls.io/r/idlesign/django-sitetree
+----
 
-.. image:: https://travis-ci.org/idlesign/django-sitetree.svg?branch=master
+|release| |lic| |ci| |coverage|
+
+.. |release| image:: https://img.shields.io/pypi/v/django-sitetree.svg
+    :target: https://pypi.python.org/pypi/django-sitetree
+
+.. |lic| image:: https://img.shields.io/pypi/l/django-sitetree.svg
+    :target: https://pypi.python.org/pypi/django-sitetree
+
+.. |ci| image:: https://img.shields.io/travis/idlesign/django-sitetree/master.svg
     :target: https://travis-ci.org/idlesign/django-sitetree
 
-.. image:: https://landscape.io/github/idlesign/django-sitetree/master/landscape.svg?style=plastic
-   :target: https://landscape.io/github/idlesign/django-sitetree/master
+.. |coverage| image:: https://img.shields.io/coveralls/idlesign/django-sitetree/master.svg
+    :target: https://coveralls.io/r/idlesign/django-sitetree
 
 
 What's that
@@ -41,7 +46,10 @@ If we define a named URL for user personal page in urls.py, for example, 'users-
       |_users-personal user.id  - User Called {{ user.first_name }}
 
 After setting up site structure as a sitetree you should be able to use convenient and highly customizable site navigation means (menus, breadcrumbs and full site trees).
+
 User access to certain sitetree items can be restricted to authenticated users or more accurately with the help of Django permissions system (Auth contrib package).
+
+Sitetree also allows you to define dynamic trees in your code instead of Admin interface. And even more: you can combine those two types of trees in more sophisticated ways.
 
 
 Documentation

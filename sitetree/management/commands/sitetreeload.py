@@ -1,40 +1,54 @@
-import sys
-from optparse import make_option
 from collections import defaultdict
 
-import django
+import sys
+from django import VERSION
 from django.core import serializers
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.core.management.color import no_style
 from django.db import connections, router, transaction, DEFAULT_DB_ALIAS
-from django.core.exceptions import ObjectDoesNotExist
 
+from sitetree.compat import CommandOption, options_getter
 from sitetree.utils import get_tree_model, get_tree_item_model
-
 
 MODEL_TREE_CLASS = get_tree_model()
 MODEL_TREE_ITEM_CLASS = get_tree_item_model()
 
+VER_LESS_18 = VERSION < (1, 8)
+
+
+get_options = options_getter((
+    CommandOption(
+        '--database', action='store', dest='database',
+        default=DEFAULT_DB_ALIAS, help='Nominates a specific database to load fixtures into. '
+                                       'Defaults to the "default" database.'),
+
+    CommandOption(
+        '--mode', action='store', dest='mode', default='append',
+        help='Mode to put data into DB. Variants: `replace`, `append`.'),
+
+    CommandOption(
+        '--items_into_tree', action='store', dest='items_into_tree', default=None,
+        help='Import only tree items data into tree with given alias.'),
+))
+
 
 class Command(BaseCommand):
 
-    option_list = BaseCommand.option_list + (
-        make_option('--database', action='store', dest='database',
-            default=DEFAULT_DB_ALIAS, help='Nominates a specific database to load fixtures into. '
-                    'Defaults to the "default" database.'),
-        make_option('--mode', action='store', dest='mode',
-            default='append', help='Mode to put data into DB. Variants: `replace`, `append`.'),
-        make_option('--items_into_tree', action='store', dest='into_tree',
-            default=None, help='Import only tree items data into tree with given alias.'),
-        )
+    option_list = get_options()
+
     help = 'Loads sitetrees from fixture in JSON format into database.'
     args = '[fixture_file fixture_file ...]'
+
+    def add_arguments(self, parser):
+        parser.add_argument('args', metavar='fixture', nargs='+', help='Fixture files.')
+        get_options(parser.add_argument)
 
     def handle(self, *fixture_files, **options):
 
         using = options.get('database', DEFAULT_DB_ALIAS)
         mode = options.get('mode', 'append')
-        items_into_tree = options.get('into_tree', None)
+        items_into_tree = options.get('items_into_tree', None)
 
         if items_into_tree is not None:
             try:
@@ -50,27 +64,14 @@ class Command(BaseCommand):
 
         self.style = no_style()
 
-        django_version = django.get_version()
-        django_version_less_17 = django_version < '1.7'
-        django_version_less_18 = django_version < '1.8'
-
-        if django_version_less_17:
-            transaction.commit_unless_managed(using=using)
-
-        if django_version_less_18:
+        if VER_LESS_18:
             transaction.enter_transaction_management(using=using)
-
-        if django_version_less_17:
-            transaction.managed(True, using=using)
 
         loaded_object_count = 0
 
         if mode == 'replace':
-            try:
-                MODEL_TREE_CLASS.objects.all().delete()
-                MODEL_TREE_ITEM_CLASS.objects.all().delete()
-            except ObjectDoesNotExist:
-                pass
+            MODEL_TREE_CLASS.objects.all().delete()
+            MODEL_TREE_ITEM_CLASS.objects.all().delete()
 
         for fixture_file in fixture_files:
 
@@ -125,6 +126,9 @@ class Command(BaseCommand):
 
                     parents_ahead = []
 
+                    # Parents go first: enough for simple cases.
+                    tree_items[orig_tree_id].sort(key=lambda item: item.id not in tree_item_parents.keys())
+
                     for tree_item in tree_items[orig_tree_id]:
                         parent_ahead = False
                         self.stdout.write('Importing item `%s` ...\n' % tree_item.title)
@@ -164,15 +168,13 @@ class Command(BaseCommand):
                 import traceback
                 fixture.close()
 
-                if django_version_less_18:
+                if VER_LESS_18:
                     transaction.rollback(using=using)
                     transaction.leave_transaction_management(using=using)
 
                 self.stderr.write(
                     self.style.ERROR('Fixture `%s` import error: %s\n' % (
-                        fixture_file, ''.join(traceback.format_exception(
-                            sys.exc_type, sys.exc_value, sys.exc_traceback
-                        ))
+                        fixture_file, ''.join(traceback.format_exception(*sys.exc_info()))
                     ))
                 )
 
@@ -186,7 +188,7 @@ class Command(BaseCommand):
                 for line in sequence_sql:
                     cursor.execute(line)
 
-        if django_version_less_18:
+        if VER_LESS_18:
             transaction.commit(using=using)
             transaction.leave_transaction_management(using=using)
 

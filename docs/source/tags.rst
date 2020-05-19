@@ -31,7 +31,7 @@ Usage example::
 
 This command renders as a menu sitetree items from tree named 'mytree', including items **under** 'trunk' and 'topmenu' aliased items.
 That means that 'trunk' and 'topmenu' themselves won't appear in a menu, but rather all their ancestors. If you need item filtering behaviour
-please use :ref:`tree hooks <tree-hooks>`.
+please use :ref:`tree handler customizations <tree-custom>`.
 
   Aliases are given to items through Django's admin site.
 
@@ -93,12 +93,16 @@ please use :ref:`tree hooks <tree-hooks>`.
       Bad
       Ugly
 
-  + **this-ancestor-children** - items under grandparent item (closest to root) for the item resolved as current for the current page.
+  + **this-parent-siblings** - items under parent item for the item resolved as current for the current page.
 
     Considering that we are now at `Public` renders::
 
       Web
       Postal
+
+  + **this-ancestor-children** - items under grandparent item (closest to root) for the item resolved as current for the current page.
+
+    Considering that we are now at `Public` renders all items under `Home` (which is closest to the root).
 
   Thus in the template tag example above `trunk` is reserved alias, and `topmenu` alias is given to an item through
   admin site.
@@ -168,3 +172,28 @@ Usage example::
   {% sitetree_page_description from "mytree" %}
 
 This command renders current page description from tree named 'mytree'.
+
+
+.. _tag-page-hint:
+
+sitetree_page_hint
+------------------
+
+This tag is similar to `sitetree_page_description`, but it uses data from  tree item `hint` field instead of a `description` fields.
+
+Usage example::
+
+  {% sitetree_page_hint from "mytree" %}
+
+
+
+.. _tag-ignore-errors:
+
+SITETREE_RAISE_ITEMS_ERRORS_ON_DEBUG
+------------------------------------
+
+DEFAULT: True
+
+There are some rare occasions when you want to turn off errors that are thrown by sitetree even during debug.
+
+Setting SITETREE_RAISE_ITEMS_ERRORS_ON_DEBUG = False will turn them off.

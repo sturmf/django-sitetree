@@ -1,12 +1,21 @@
 from django.conf import settings as django_settings
-from django.core.urlresolvers import get_urlconf, get_resolver
+from django import VERSION as django_version
+from django import forms
+try:
+    from django.urls import get_urlconf, get_resolver
+except ImportError:
+    from django.core.urlresolvers import get_urlconf, get_resolver
 from django.utils.translation import ugettext_lazy as _
-from django.utils import six
 from django.http import HttpResponseRedirect
 from django.contrib import admin
 from django.contrib.admin.sites import NotRegistered
 from django.contrib import messages
-from django.conf.urls import patterns, url
+from django.conf.urls import url
+
+DJANGO_POST_19 = django_version >= (1, 9, 0)
+
+if not DJANGO_POST_19:
+    from django.conf.urls import patterns as patterns_func
 
 from .settings import MODEL_TREE, MODEL_TREE_ITEM
 from .fields import TreeItemChoiceField
@@ -42,9 +51,9 @@ def get_tree_item_url_name(page, with_namespace=False):
 
 _TREE_URLS = {
     'app': get_app_n_model('MODEL_TREE')[0],
-    'change': get_tree_url_name('change', 'admin:'),
-    'changelist': get_tree_url_name('changelist', 'admin:'),
-    'treeitem_change': get_tree_item_url_name('change', 'admin:')
+    'change': get_tree_url_name('change', True),
+    'changelist': get_tree_url_name('changelist', True),
+    'treeitem_change': get_tree_item_url_name('change', True)
 }
 
 
@@ -79,9 +88,18 @@ def override_item_admin(admin_class):
     _reregister_tree_admin()
 
 
+class TreeItemForm(forms.ModelForm):
+    """Item form with swapped parent field."""
+
+    parent = TreeItemChoiceField()
+
+
 class TreeItemAdmin(admin.ModelAdmin):
 
+    form = TreeItemForm
+
     exclude = ('tree', 'sort_order')
+
     fieldsets = (
         (_('Basic settings'), {
             'fields': ('parent', 'title', 'url', 'url_params',)
@@ -99,8 +117,36 @@ class TreeItemAdmin(admin.ModelAdmin):
             'fields': ('hint', 'description', 'alias', 'urlaspattern')
         }),
     )
+
     filter_horizontal = ('access_permissions',)
     change_form_template = 'admin/sitetree/treeitem/change_form.html'
+    delete_confirmation_template = 'admin/sitetree/treeitem/delete_confirmation.html'
+
+    def formfield_for_manytomany(self, db_field, request=None, **kwargs):
+
+        # The same as for GroupAdmin
+        # Avoid a major performance hit resolving permission names which
+        # triggers a content_type load:
+        if db_field.name == 'access_permissions':
+            objects = db_field.remote_field.model.objects if DJANGO_POST_19 else db_field.rel.to.objects
+            qs = kwargs.get('queryset', objects)
+            kwargs['queryset'] = qs.select_related('content_type')
+
+        return super(TreeItemAdmin, self).formfield_for_manytomany(db_field, request=request, **kwargs)
+
+    def _redirect(self, request, response):
+        """Generic redirect for item editor."""
+
+        if '_addanother' in request.POST:
+            return HttpResponseRedirect('../item_add/')
+
+        elif '_save' in request.POST:
+            return HttpResponseRedirect('../')
+
+        elif '_continue' in request.POST:
+            return response
+
+        return HttpResponseRedirect('')
 
     def response_add(self, request, obj, post_url_continue=None, **kwargs):
         """Redirects to the appropriate items' 'continue' page on item add.
@@ -111,7 +157,8 @@ class TreeItemAdmin(admin.ModelAdmin):
         """
         if post_url_continue is None:
             post_url_continue = '../item_%s/' % obj.pk
-        return super(TreeItemAdmin, self).response_add(request, obj, post_url_continue)
+
+        return self._redirect(request, super(TreeItemAdmin, self).response_add(request, obj, post_url_continue))
 
     def response_change(self, request, obj, **kwargs):
         """Redirects to the appropriate items' 'add' page on item change.
@@ -120,13 +167,7 @@ class TreeItemAdmin(admin.ModelAdmin):
         should make some changes to redirection process.
 
         """
-        response = super(TreeItemAdmin, self).response_change(request, obj)
-        if '_addanother' in request.POST:
-            return HttpResponseRedirect('../item_add/')
-        elif '_save' in request.POST:
-            return HttpResponseRedirect('../')
-        else:
-            return HttpResponseRedirect('')
+        return self._redirect(request, super(TreeItemAdmin, self).response_change(request, obj))
 
     def get_form(self, request, obj=None, **kwargs):
         """Returns modified form for TreeItem model.
@@ -135,16 +176,9 @@ class TreeItemAdmin(admin.ModelAdmin):
         """
         if obj is not None and obj.parent is not None:
             self.previous_parent = obj.parent
-            previous_parent_id = self.previous_parent.id
-        else:
-            previous_parent_id = None
 
-        my_choice_field = TreeItemChoiceField(self.tree, initial=previous_parent_id)
         form = super(TreeItemAdmin, self).get_form(request, obj, **kwargs)
-        my_choice_field.label = form.base_fields['parent'].label
-        my_choice_field.help_text = form.base_fields['parent'].help_text
-        # Replace 'parent' TreeItem field with new appropriate one
-        form.base_fields['parent'] = my_choice_field
+        form.base_fields['parent'].choices_init(self.tree)
 
         # Try to resolve all currently registered url names including those in namespaces.
         if not getattr(self, 'known_url_names', False):
@@ -162,11 +196,12 @@ class TreeItemAdmin(admin.ModelAdmin):
             'seems to be invalid. Currently registered URL pattern names and parameters: ')
         form.known_url_names = self.known_url_names
         form.known_url_rules = self.known_url_rules
+
         return form
 
     def _stack_known_urls(self, reverse_dict, ns=None):
         for url_name, url_rules in reverse_dict.items():
-            if isinstance(url_name, six.string_types):
+            if isinstance(url_name, str):
                 if ns is not None:
                     url_name = '%s:%s' % (ns, url_name)
                 self.known_url_names.append(url_name)
@@ -249,18 +284,18 @@ def redirects_handler(*args, **kwargs):
     introduced in Django 1.4 by url handling changes.
 
     """
-    referer = args[0].META['HTTP_REFERER']
+    path = args[0].path
     shift = '../'
 
-    if 'delete' in referer:
+    if 'delete' in path:
         # Weird enough 'delete' is not handled by TreeItemAdmin::response_change().
         shift += '../'
-    elif 'history' in referer:
+    elif 'history' in path:
         if 'item_id' not in kwargs:
             # Encountered request from history page to return to tree layout page.
             shift += '../'
 
-    return HttpResponseRedirect(referer + shift)
+    return HttpResponseRedirect(path + shift)
 
 
 class TreeAdmin(admin.ModelAdmin):
@@ -280,25 +315,41 @@ class TreeAdmin(admin.ModelAdmin):
         super(TreeAdmin, self).__init__(*args, **kwargs)
         self.tree_admin = _ITEM_ADMIN()(MODEL_TREE_ITEM_CLASS, admin.site)
 
+    def render_change_form(self, request, context, **kwargs):
+        context['icon_ext'] = '.svg' if DJANGO_POST_19 else '.gif'
+        context['django19'] = DJANGO_POST_19
+        return super(TreeAdmin, self).render_change_form(request, context, **kwargs)
+
     def get_urls(self):
         """Manages not only TreeAdmin URLs but also TreeItemAdmin URLs."""
         urls = super(TreeAdmin, self).get_urls()
-        sitetree_urls = patterns('',
-            # Trying to be nice and adopt url handling changes in Django 1.4, 1.5 Admin contrib.
-            url(r'^/$', redirects_handler, name=get_tree_item_url_name('changelist')),
-            url(r'^((?P<tree_id>\d+)/)?item_add/$',
+
+        prefix_change = 'change/' if DJANGO_POST_19 else ''
+
+        sitetree_urls = [
+            url(r'^change/$', redirects_handler, name=get_tree_item_url_name('changelist')),
+
+            url(r'^((?P<tree_id>\d+)/)?%sitem_add/$' % prefix_change,
                 self.admin_site.admin_view(self.tree_admin.item_add), name=get_tree_item_url_name('add')),
-            url(r'^(?P<tree_id>\d+)/item_(?P<item_id>\d+)/$',
+
+            url(r'^(?P<tree_id>\d+)/%sitem_(?P<item_id>\d+)/$' % prefix_change,
                 self.admin_site.admin_view(self.tree_admin.item_edit), name=get_tree_item_url_name('change')),
-            url(r'^item_(?P<item_id>\d+)/$',
+
+            url(r'^%sitem_(?P<item_id>\d+)/$' % prefix_change,
                 self.admin_site.admin_view(self.tree_admin.item_edit), name=get_tree_item_url_name('change')),
-            url(r'^((?P<tree_id>\d+)/)?item_(?P<item_id>\d+)/delete/$',
+
+            url(r'^((?P<tree_id>\d+)/)?%sitem_(?P<item_id>\d+)/delete/$' % prefix_change,
                 self.admin_site.admin_view(self.tree_admin.item_delete), name=get_tree_item_url_name('delete')),
-            url(r'^((?P<tree_id>\d+)/)?item_(?P<item_id>\d+)/history/$',
+
+            url(r'^((?P<tree_id>\d+)/)?%sitem_(?P<item_id>\d+)/history/$' % prefix_change,
                 self.admin_site.admin_view(self.tree_admin.item_history), name=get_tree_item_url_name('history')),
-            url(r'^(?P<tree_id>\d+)/item_(?P<item_id>\d+)/move_(?P<direction>(up|down))/$',
+
+            url(r'^(?P<tree_id>\d+)/%sitem_(?P<item_id>\d+)/move_(?P<direction>(up|down))/$' % prefix_change,
                 self.admin_site.admin_view(self.tree_admin.item_move), name=get_tree_item_url_name('move')),
-        )
+        ]
+
+        if not DJANGO_POST_19:
+            sitetree_urls = patterns_func('', *sitetree_urls)
 
         if SMUGGLER_INSTALLED:
             sitetree_urls += (url(r'^dump_all/$', self.admin_site.admin_view(self.dump_view), name='sitetree_dump'),)

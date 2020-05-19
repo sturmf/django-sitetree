@@ -1,23 +1,35 @@
-from optparse import make_option
-
 from django.core.management.base import BaseCommand
 from django.db import DEFAULT_DB_ALIAS
 
 from sitetree.utils import get_tree_model, import_project_sitetree_modules
 from sitetree.settings import APP_MODULE_NAME
+from sitetree.sitetreeapp import Cache
+from sitetree.compat import CommandOption, options_getter
 
 
 MODEL_TREE_CLASS = get_tree_model()
 
 
+get_options = options_getter((
+    CommandOption(
+        '--database', action='store', dest='database', default=DEFAULT_DB_ALIAS,
+        help='Nominates a specific database to place trees and items into. Defaults to the "default" database.'
+    ),
+))
+
+
 class Command(BaseCommand):
 
-    help = 'Places sitetrees of the project applications (defined in `app_name.sitetree.py`) into DB, replacing old ones if any.'
+    help = 'Places sitetrees of the project applications (defined in `app_name.sitetree.py`) into DB, ' \
+           'replacing old ones if any.'
+
     args = '[app_name app_name ...]'
-    option_list = BaseCommand.option_list + (
-        make_option('--database', action='store', dest='database',
-            default=DEFAULT_DB_ALIAS, help='Nominates a specific database to place trees and items into. Defaults to the "default" database.'),
-        )
+
+    option_list = get_options()
+
+    def add_arguments(self, parser):
+        parser.add_argument('args', metavar='app', nargs='*', help='Application names.')
+        get_options(parser.add_argument)
 
     def handle(self, *apps, **options):
         using = options.get('database', DEFAULT_DB_ALIAS)
@@ -30,7 +42,7 @@ class Command(BaseCommand):
         for module in tree_modules:
             sitetrees = getattr(module, 'sitetrees', None)
             app = module.__dict__['__package__']
-            if not apps or (apps and app in apps):
+            if not apps or app in apps:
                 if sitetrees is not None:
                     self.stdout.write('Sitetrees found in `%s` app ...\n' % app)
                     for tree in sitetrees:
@@ -51,4 +63,9 @@ class Command(BaseCommand):
                             item.save(using=using)
                             # Copy permissions to M2M field once `item`
                             # has been saved
-                            item.access_permissions = item.permissions
+                            if hasattr(item.access_permissions, 'set'):
+                                item.access_permissions.set(item.permissions)
+                            else:
+                                item.access_permissions = item.permissions
+
+        Cache.reset()

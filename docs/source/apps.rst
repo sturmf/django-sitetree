@@ -16,24 +16,29 @@ Let's suppose you have `books` application and want do define a sitetree for it.
 
 .. code-block:: python
 
-      from sitetree.utils import tree, item
+    from sitetree.utils import tree, item
 
-      # Be sure you defined `sitetrees` in your module.
-      sitetrees = (
-          # Define a tree with `tree` function.
-          tree('books', items=[
-              # Then define items and their children with `item` function.
-              item('Books', 'books-listing', children=[
-                  item('Book named "{{ book.title }}"', 'books-details', in_menu=False, in_sitetree=False),
-                  item('Add a book', 'books-add'),
-                  item('Edit "{{ book.title }}"', 'books-edit', in_menu=False, in_sitetree=False)
-              ])
-          ]),
-          # ... You can define more than one tree for your app.
-      )
+    # Be sure you defined `sitetrees` in your module.
+    sitetrees = (
+      # Define a tree with `tree` function.
+      tree('books', items=[
+          # Then define items and their children with `item` function.
+          item('Books', 'books-listing', children=[
+              item('Book named "{{ book.title }}"', 'books-details', in_menu=False, in_sitetree=False),
+              item('Add a book', 'books-add', access_by_perms=['booksapp.allow_add']),
+              item('Edit "{{ book.title }}"', 'books-edit', in_menu=False, in_sitetree=False)
+          ])
+      ]),
+      # ... You can define more than one tree for your app.
+    )
 
 
-  Please consider `tree` and `item` signatures for possible options.
+Please see `tree` and `item` signatures for possible options.
+
+.. note::
+
+    If you added extra fields to the Tree and TreeItem models,
+    then you can specify their values when instantiating `item` see :ref:`custom-model-sitetree`
 
 
 Export sitetree to DB
@@ -57,9 +62,10 @@ Dynamic sitetree structuring
 
 Optionally you can structure app-defined sitetrees into existing or new trees runtime.
 
-Basically one should compose a dynamic tree with `compose_dynamic_tree()` and register it with `register_dynamic_trees()`.
+Basically one should compose a dynamic tree with ``compose_dynamic_tree()`` and register it with ``register_dynamic_trees()``.
 
-Let's suppose the following code is in `setting.py` of your project
+Let's suppose the following code somewhere where app registry is already created, e.g. ``config.ready()`` or even
+in ``urls.py`` of your project.
 
 
 .. code-block:: python
@@ -93,4 +99,8 @@ Let's suppose the following code is in `setting.py` of your project
         # dynamic trees are rendered immediately.
         reset_cache=True
     )
+
+
+.. note:: If you use only dynamic trees you can set ``SITETREE_DYNAMIC_ONLY = True`` to prevent the application
+    from querying trees and items stored in DB.
 

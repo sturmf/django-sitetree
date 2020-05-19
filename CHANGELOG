@@ -2,6 +2,108 @@ django-sitetree changelog
 =========================
 
 
+v1.14.0 [2019-12-05]
+--------------------
++ Add Django 3.0 compatibility. Effectively deprecates Py2 support.
+
+
+v1.13.2 [2019-11-23]
+--------------------
+* Fixed a regression in Admin not filtering Parent item choices (see #266).
+
+
+v1.13.1 [2019-10-19]
+--------------------
+* Fixed customized exception handling template using sitetree masking initial exception.
+
+
+v1.13.0
+-------
+! Deprecated 'register_items_hook()' function.
+! Dropped QA for Django 1.7.
+! Dropped QA for Python 2.
+! Dropped QA for Python 3.4.
++ Added 'SITETREE_CLS' setting support for deep tree handler customizations.
+
+
+v1.12.0
+-------
++ 'register_items_hook()' can handle functions accepting 'context' argument.
++ Added SITETREE_ADMIN_APP_NAME setting support for custom admin apps.
++ Allow custom widget for parent field in admin.
++ Dynamic tree() function now accepts custom keyword arguments.
++ Improved suppport for national characters in URIs.
+* Admin: fixed redirect on new item save (closes #231).
+
+
+v1.11.0
+-------
++ Improved Django 2.1 compatiblity.
+
+
+v1.10.0
+-------
++ Added Bootstrap 3 deep menu template (with nested dropdowns).
++ Added SITETREE_DYNAMIC_ONLY setting.
++ Japanese translation.
+
+
+v1.9.0
+------
++ Added Bootstrap 4 templates.
+* Dropped support for Python 2.6 and 3.3.
+* Dropped Django<1.7 related code.
++ Added basic Django 2.0 compatibility.
++ Added French translation.
+* Reduced number of SQL queries on item admin page (see #237)
+
+
+v1.8.0
+------
++ IMPORTANT: i18n trees now support full lang names (e.g. de-ch, pt-br), update your i18n trees aliases.
++ Django 1.11 compatibility improvements.
+
+
+v1.7.0
+------
+* IMPORTANT: Caching reworked.
+* IMPORTANT: Dropped Django 1.5, 1.6 support (will not be tested anymore).
++ Added `ITEMS_FIELD_ROOT_ID` setting (see #205).
+* Reduced DB hits for trees with lots of permissions (see #213).
+* Improved `sitetreeload` command py3 compatibility (see #209).
+* Fixed `sitetreeload` unable to load some twisted tree structures (see #209).
+* Fixed `sitetree_resync_apps` run without args.
+* Fixed package distribution (see #222).
+
+
+v1.6.0
+------
++ Prevent TreeItems from being their own parents (see #200).
++ Added `toolbox` module as API single entry point.
++ Added `exceptions` module.
+* Django 1.10 compatibility improvements.
+* Cache.reset() misbehavior fixed (closes #191).
+* Fixed broken delete operation in admin for custom TreeItem (see #190).
+* Reduced number of cache calls (see #194).
+
+
+v1.5.1
+------
+* Django 1.9 compatibility improvements.
+
+
+v1.5.0
+------
++ Added Norwegian translation.
++ Added SITETREE_RAISE_ITEMS_ERRORS_ON_DEBUG setting (see #157).
++ Exposed SITETREE_CACHE_TIMEOUT setting.
++ Added `as` clause support for `sitetree_page_title`, `sitetree_page_description` and `sitetree_page_hint` template tags.
+* Fixed cache problems when using sitetree_resync_apps  (see #135, #166).
+* Fixed disappearing tree items for guests in Admin contrib (Django 1.8) (see #164).
+* Fix deprecation warning in Django 1.8 (see #178).
+* Fixed permissions check for dynamic tree items (see #165).
+
+
 v1.4.0
 ------
 + Introduced Django 1.8 support (see #152).

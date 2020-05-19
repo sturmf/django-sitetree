@@ -1,16 +1,11 @@
+from importlib import import_module
+
+from django.apps import apps
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ImproperlyConfigured
-from django.utils import six
-from django.utils.importlib import import_module
 from django.utils.module_loading import module_has_submodule
 
-try:
-    from django.apps import apps
-    apps_get_model = apps.get_model
-except ImportError:  # Django < 1.7
-    from django.db.models import get_model
-    apps_get_model = None
-
+apps_get_model = apps.get_model
 
 from sitetree import settings
 
@@ -20,12 +15,17 @@ def generate_id_for(obj):
     return id(obj)
 
 
-def tree(alias, title='', items=None):
+def tree(alias, title='', items=None, **kwargs):
     """Dynamically creates and returns a sitetree.
-    `items` - dynamic sitetree items objects created by `item` function.
 
+    :param str|unicode alias:
+    :param str|unicode title:
+    :param iterable items: dynamic sitetree items objects created by `item` function.
+    :param kwargs: Additional arguments to pass to tree item initializer.
+
+    :rtype: TreeBase
     """
-    tree_obj = get_tree_model()(alias=alias, title=title)
+    tree_obj = get_tree_model()(alias=alias, title=title, **kwargs)
     tree_obj.id = generate_id_for(tree_obj)
     tree_obj.is_dynamic = True
 
@@ -42,34 +42,58 @@ def tree(alias, title='', items=None):
     return tree_obj
 
 
-def item(title, url, children=None, url_as_pattern=True, hint='', alias='', description='',
-         in_menu=True, in_breadcrumbs=True, in_sitetree=True,
-         access_loggedin=False, access_guest=False,
-         access_by_perms=None, perms_mode_all=True):
+def item(
+    title, url, children=None, url_as_pattern=True, hint='', alias='', description='',
+    in_menu=True, in_breadcrumbs=True, in_sitetree=True,
+    access_loggedin=False, access_guest=False,
+    access_by_perms=None, perms_mode_all=True, **kwargs):
     """Dynamically creates and returns a sitetree item object.
 
-    :param str title:
-    :param str url:
+    :param str|unicode title:
+
+    :param str|unicode url:
+
     :param list, set children: a list of children for tree item. Children should also be created by `item` function.
+
     :param bool url_as_pattern: consider URL as a name of a named URL
-    :param str hint: hints are usually shown to users
-    :param str alias: item name to address it from templates
-    :param str description: additional information on item (usually is not shown to users)
+
+    :param str|unicode hint: hints are usually shown to users
+
+    :param str|unicode alias: item name to address it from templates
+
+    :param str|unicode description: additional information on item (usually is not shown to users)
+
     :param bool in_menu: show this item in menus
+
     :param bool in_breadcrumbs: show this item in breadcrumbs
+
     :param bool in_sitetree: show this item in sitetrees
+
     :param bool access_loggedin: show item to logged in users only
+
     :param bool access_guest: show item to guest users only
-    :param list, str, int, Permission access_by_perms: restrict access to users with these permissions
+
+    :param list|str||unicode|int, Permission access_by_perms: restrict access to users with these permissions.
+
+        This can be set to one or a list of permission names, IDs or Permission instances.
+
+        Permission names are more portable and should be in a form `<app_label>.<perm_codename>`, e.g.:
+            my_app.allow_save
+
+
     :param bool perms_mode_all: permissions set interpretation rule:
                 True - user should have all the permissions;
                 False - user should have any of chosen permissions.
-    :return:
+
+    :rtype: TreeItemBase
+
     """
-    item_obj = get_tree_item_model()(title=title, url=url, urlaspattern=url_as_pattern,
-                                   hint=hint, alias=alias, description=description, inmenu=in_menu,
-                                   insitetree=in_sitetree, inbreadcrumbs=in_breadcrumbs,
-                                   access_loggedin=access_loggedin, access_guest=access_guest)
+    item_obj = get_tree_item_model()(
+        title=title, url=url, urlaspattern=url_as_pattern,
+        hint=hint, alias=alias, description=description, inmenu=in_menu,
+        insitetree=in_sitetree, inbreadcrumbs=in_breadcrumbs,
+        access_loggedin=access_loggedin, access_guest=access_guest,
+        **kwargs)
 
     item_obj.id = generate_id_for(item_obj)
     item_obj.is_dynamic = True
@@ -82,12 +106,14 @@ def item(title, url, children=None, url_as_pattern=True, hint='', alias='', desc
             access_by_perms = [access_by_perms]
 
         for perm in access_by_perms:
-            if isinstance(perm, six.string_types):
+            if isinstance(perm, str):
                 # Get permission object from string
                 try:
                     app, codename = perm.split('.')
                 except ValueError:
-                    raise ValueError('Wrong permission string format: supplied - `%s`; expected - `<app_name>.<permission_name>`.' % perm)
+                    raise ValueError(
+                        'Wrong permission string format: supplied - `%s`; '
+                        'expected - `<app_name>.<permission_name>`.' % perm)
 
                 try:
                     perm = Permission.objects.get(codename=codename, content_type__app_label=app)
@@ -114,7 +140,11 @@ def item(title, url, children=None, url_as_pattern=True, hint='', alias='', desc
 
 
 def import_app_sitetree_module(app):
-    """Imports sitetree module from a given app."""
+    """Imports sitetree module from a given app.
+
+    :param str|unicode app: Application name
+    :return: module|None
+    """
     module_name = settings.APP_MODULE_NAME
     module = import_module(app)
     try:
@@ -127,7 +157,11 @@ def import_app_sitetree_module(app):
 
 
 def import_project_sitetree_modules():
-    """Imports sitetrees modules from packages (apps)."""
+    """Imports sitetrees modules from packages (apps).
+    Returns a list of submodules.
+
+    :rtype: list
+    """
     from django.conf import settings as django_settings
     submodules = []
     for app in django_settings.INSTALLED_APPS:
@@ -138,36 +172,50 @@ def import_project_sitetree_modules():
 
 
 def get_app_n_model(settings_entry_name):
-    """Returns tuple with application and tree[item] model class names."""
+    """Returns tuple with application and tree[item] model class names.
+
+    :param str|unicode settings_entry_name:
+    :rtype: tuple
+    """
     try:
         app_name, model_name = getattr(settings, settings_entry_name).split('.')
     except ValueError:
-        raise ImproperlyConfigured('`SITETREE_%s` must have the following format: `app_name.model_name`.' % settings_entry_name)
+        raise ImproperlyConfigured(
+            '`SITETREE_%s` must have the following format: `app_name.model_name`.' % settings_entry_name)
     return app_name, model_name
 
 
 def get_model_class(settings_entry_name):
-    """Returns a certain sitetree model as defined in the project settings."""
+    """Returns a certain sitetree model as defined in the project settings.
+
+    :param str|unicode settings_entry_name:
+    :rtype: TreeItemBase|TreeBase
+    """
     app_name, model_name = get_app_n_model(settings_entry_name)
-    if apps_get_model is None:
-        model = get_model(app_name, model_name)
-    else:
-        try:
-            model = apps_get_model(app_name, model_name)
-        except (LookupError, ValueError):
-            model = None
+
+    try:
+        model = apps_get_model(app_name, model_name)
+    except (LookupError, ValueError):
+        model = None
 
     if model is None:
-        raise ImproperlyConfigured('`SITETREE_%s` refers to model `%s` that has not been installed.' % (settings_entry_name, model_name))
+        raise ImproperlyConfigured(
+            '`SITETREE_%s` refers to model `%s` that has not been installed.' % (settings_entry_name, model_name))
 
     return model
 
 
 def get_tree_model():
-    """Returns the Tree model, set for the project."""
+    """Returns the Tree model, set for the project.
+
+    :rtype: TreeBase
+    """
     return get_model_class('MODEL_TREE')
 
 
 def get_tree_item_model():
-    """Returns the TreeItem model, set for the project."""
+    """Returns the TreeItem model, set for the project.
+
+    :rtype: TreeItemBase
+    """
     return get_model_class('MODEL_TREE_ITEM')

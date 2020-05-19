@@ -1,16 +1,8 @@
-from django.db import models
-from django.conf import settings
 from django.contrib.auth.models import Permission
+from django.db import models
 from django.utils.translation import ugettext_lazy as _
-from django.utils.encoding import python_2_unicode_compatible
 
 from .settings import MODEL_TREE, TREE_ITEMS_ALIASES
-
-
-# This allows South to handle our custom 'CharFieldNullable' field.
-if 'south' in settings.INSTALLED_APPS:
-    from south.modelsinspector import add_introspection_rules
-    add_introspection_rules([], ['^sitetree\.models\.CharFieldNullable'])
 
 
 class CharFieldNullable(models.CharField):
@@ -26,7 +18,6 @@ class CharFieldNullable(models.CharField):
         return self.to_python(value)
 
 
-@python_2_unicode_compatible
 class TreeBase(models.Model):
 
     title = models.CharField(
@@ -48,7 +39,6 @@ class TreeBase(models.Model):
         return self.alias
 
 
-@python_2_unicode_compatible
 class TreeItemBase(models.Model):
 
     PERM_TYPE_ANY = 1
@@ -77,7 +67,7 @@ class TreeItemBase(models.Model):
                     '<b>Note:</b> Refer to Django "URL dispatcher" documentation (e.g. "Naming URL patterns" part).'),
         db_index=True, default=False)
     tree = models.ForeignKey(
-        MODEL_TREE, related_name='%(class)s_tree', verbose_name=_('Site Tree'),
+        MODEL_TREE, related_name='%(class)s_tree', on_delete=models.CASCADE, verbose_name=_('Site Tree'),
         help_text=_('Site tree this item belongs to.'), db_index=True)
     hidden = models.BooleanField(
         _('Hidden'), help_text=_('Whether to show this item in navigation.'), db_index=True, default=False)
@@ -121,18 +111,29 @@ class TreeItemBase(models.Model):
     # These two are for 'adjacency list' model.
     # This is the current approach of tree representation for sitetree.
     parent = models.ForeignKey(
-        'self', related_name='%(class)s_parent', verbose_name=_('Parent'),
+        'self', related_name='%(class)s_parent', on_delete=models.CASCADE, verbose_name=_('Parent'),
         help_text=_('Parent site tree item.'), db_index=True, null=True, blank=True)
     sort_order = models.IntegerField(
         _('Sort order'),
         help_text=_('Item position among other site tree items under the same parent.'), db_index=True, default=0)
 
     def save(self, force_insert=False, force_update=False, **kwargs):
-        """We override parent save method to set item's sort order to its' primary
-        key value.
+        """Ensure that item is not its own parent and set proper sort order.
 
         """
+        # Ensure that item is not its own parent, since this breaks
+        # the sitetree (and possibly the entire site).
+        if self.parent == self:
+            self.parent = None
+        
+        # Set item's sort order to its primary key.
+        id_ = self.id
+        if id_ and self.sort_order == 0:
+            self.sort_order = id_
+        
         super(TreeItemBase, self).save(force_insert, force_update, **kwargs)
+
+        # Set item's sort order to its primary key if not already set.
         if self.sort_order == 0:
             self.sort_order = self.id
             self.save()
